@@ -8,7 +8,6 @@ const {
   MAX_DATA_OP_DATA_SIZE,
 } = require("./const");
 const { getMsgOpCode } = require("./util");
-const { buffer } = require("stream/consumers");
 
 /**
  * @typedef {Object} WRQHeader
@@ -17,57 +16,63 @@ const { buffer } = require("stream/consumers");
  * */
 
 /**
- * @param {import("dgram").RemoteInfo} rinfo
  * @param {import("../logger").Logger} log
+ * @param {import("../storage").Storage} storage
+ * @param {import("dgram").RemoteInfo} rinfo
  * @param {Buffer} buf
  * */
-function workWithRRQ(rinfo, log, buf) {
+function workWithRRQ(log, storage, rinfo, buf) {
   const h = parseRQHeader(buf);
 
-  log.debug(h, "RRQ header data");
+  log.info(h, "RRQ received");
 
   const client = dgram.createSocket("udp4");
+  client.connect(rinfo.port, rinfo.address, () => {
+    storage.getFile(log, h.filename).then(
+      (f) => {
+        sendFile(log, client, f);
+      },
+      (err) => {
+        log.info(err, "failed to send a file");
 
-  sendFile(log, client, rinfo, resp);
+        sendClientErr(log, client, ERR_CODES.NOT_FOUND, "file not found");
+      },
+    );
+  });
 }
 
 /**
  * @param {import("../logger").Logger} log
  * @param {dgram.Socket} client
- * @param {import("dgram").RemoteInfo} rinfo
  * @param {Buffer} file
  * */
-function sendFile(log, client, rinfo, file) {
+function sendFile(log, client, file) {
   let currentChunk = 1;
 
   const totalChunks = Math.ceil(file.length / MAX_DATA_OP_DATA_SIZE);
 
-  client.connect(rinfo.port, rinfo.address, () => {
-    const initalChunk = getRRespWithHeader(
-      getChunkSubarray(file, currentChunk),
-      currentChunk,
-    );
+  const initalChunk = getRRespWithHeader(
+    getChunkSubarray(file, currentChunk),
+    currentChunk,
+  );
 
-    client.send(initalChunk, (err, bytes) => {
-      getClientSendCb(log)(err, bytes);
+  client.send(initalChunk, (err, bytes) => {
+    getClientSendCb(log)(err, bytes);
 
-      currentChunk++;
-    });
+    currentChunk++;
   });
 
   client.on("message", (chunk, rinfo) => {
-    log.info(rinfo, "client request received");
-    log.debug({ packet: chunk.toString("hex") }, "client request packet");
-
     const opCode = getMsgOpCode(chunk);
 
-    log.debug({ opCode }, "client opCode");
+    log.info({ size: rinfo.size, opCode }, "client packet received");
 
-    let respChunk;
+    log.debug({ packet: chunk.toString("hex") }, "client packet");
+
     switch (opCode) {
       case OP_CODES.ACK:
         if (currentChunk <= totalChunks) {
-          respChunk = getRRespWithHeader(
+          const respChunk = getRRespWithHeader(
             getChunkSubarray(file, currentChunk),
             currentChunk,
           );
@@ -77,7 +82,7 @@ function sendFile(log, client, rinfo, file) {
         }
         break;
       case OP_CODES.ERR:
-        respChunk = getRRespWithHeader(
+        const respChunk = getRRespWithHeader(
           getChunkSubarray(file, currentChunk),
           currentChunk,
         );
@@ -115,10 +120,6 @@ function getChunkSubarray(buf, chunkNum) {
  * */
 function sendClientErr(log, client, errCode, msg) {
   const msgBuffer = Buffer.from(msg, "ascii");
-
-  if (msgBuffer.length > MAX_ERR_OP_MSG_SIZE) {
-    throw new Error("err msg size exceeds the MTU");
-  }
 
   const b = Buffer.alloc(ERR_OP_MIN_SIZE + msgBuffer.length);
 
@@ -193,9 +194,3 @@ function parseRQHeader(buf) {
 module.exports = {
   workWithRRQ,
 };
-
-const resp = Buffer.concat([
-  Buffer.alloc(512, "0", "ascii"),
-  Buffer.alloc(512, "1", "ascii"),
-  Buffer.alloc(300, "2", "ascii"),
-]);

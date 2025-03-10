@@ -6,8 +6,9 @@ const { getMsgOpCode } = require("./util");
 module.exports = {
   /**
    * @param {import("../logger").Logger} log
+   * @param {import("../storage").Storage} storage
    * */
-  launchTFTP(log) {
+  launchTFTP(log, storage) {
     const server = dgram.createSocket({
       type: "udp4",
     });
@@ -27,29 +28,29 @@ module.exports = {
     });
 
     server.on("message", (chunk, rinfo) => {
-      log.info(rinfo, "request received");
-      log.debug({ packet: chunk.toString("hex") }, "request packet");
+      const cLog = log.child({
+        port: rinfo.port,
+        address: rinfo.address,
+      });
+      cLog.debug({ packet: chunk.toString("hex") }, "initial request packet");
 
       const opCode = getMsgOpCode(chunk);
 
       switch (opCode) {
         case OP_CODES.RRQ:
-          log.debug("read request");
-
-          workWithRRQ(rinfo, log, chunk);
-
+          workWithRRQ(cLog.child({ opCode }), storage, rinfo, chunk);
           break;
         case OP_CODES.WRQ:
-          log.debug("write request");
+          cLog.debug("write request");
           break;
         case OP_CODES.DATA:
-          log.debug("data request");
+          cLog.debug("data request");
           break;
         case OP_CODES.ACK:
-          log.debug("ack request");
+          cLog.debug("ack request");
           break;
         case OP_CODES.ERR:
-          log.debug("err request");
+          cLog.debug("err request");
           break;
         default:
       }
