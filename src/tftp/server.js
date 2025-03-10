@@ -2,6 +2,7 @@ const dgram = require("dgram");
 const { OP_CODES } = require("./const");
 const { workWithRRQ } = require("./rrq");
 const { getMsgOpCode } = require("./util");
+const { workWithWRQ } = require("./wrq");
 
 module.exports = {
   /**
@@ -41,7 +42,7 @@ module.exports = {
           workWithRRQ(cLog.child({ opCode }), storage, rinfo, chunk);
           break;
         case OP_CODES.WRQ:
-          cLog.debug("write request");
+          workWithWRQ(cLog.child({ opCode }), storage, rinfo, chunk);
           break;
         case OP_CODES.DATA:
           cLog.debug("data request");

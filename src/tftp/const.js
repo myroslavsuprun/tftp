@@ -20,24 +20,28 @@ const ERR_CODES = {
   NO_USER: 7,
 };
 
-const MTU = 516;
+const TFTP_MTU = 516;
 
 const DATA_OP_MIN_SIZE = 4;
 
-const MAX_DATA_OP_DATA_SIZE = MTU - DATA_OP_MIN_SIZE;
+const MAX_DATA_OP_DATA_SIZE = TFTP_MTU - DATA_OP_MIN_SIZE;
+
+const ACK_PACKET_SIZE = 4;
 
 // OpCode (2 bytes) + Error code(2 bytes) + Null byte(1 byte)
 const ERR_OP_MIN_SIZE = 5;
 
-const MAX_ERR_OP_MSG_SIZE = MTU - ERR_OP_MIN_SIZE;
+const MAX_ERR_OP_MSG_SIZE = TFTP_MTU - ERR_OP_MIN_SIZE;
 
 module.exports = {
   DATAGRAM_SIZE,
   BLOCK_SIZE,
   OP_CODES,
   ERR_CODES,
+  TFTP_MTU,
   DATA_OP_MIN_SIZE,
   MAX_DATA_OP_DATA_SIZE,
+  ACK_PACKET_SIZE,
   MAX_ERR_OP_MSG_SIZE,
   ERR_OP_MIN_SIZE,
 };

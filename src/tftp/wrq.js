@@ -3,10 +3,11 @@ const {
   OP_CODES,
   ERR_CODES,
   ERR_OP_MIN_SIZE,
-  DATA_OP_MIN_SIZE,
-  MAX_DATA_OP_DATA_SIZE,
+  ACK_PACKET_SIZE,
+  TFTP_MTU,
 } = require("./const");
 const { getMsgOpCode, parseWRQHeader } = require("./util");
+const { WriteStream } = require("fs");
 
 /**
  * @param {import("../logger").Logger} log
@@ -14,76 +15,92 @@ const { getMsgOpCode, parseWRQHeader } = require("./util");
  * @param {import("dgram").RemoteInfo} rinfo
  * @param {Buffer} chunk
  * */
-function workWithRRQ(log, storage, rinfo, chunk) {
+function workWithWRQ(log, storage, rinfo, chunk) {
   const h = parseWRQHeader(chunk);
 
-  log.info(h, "RRQ received");
+  log.info(h, "WRQ received");
 
   const client = dgram.createSocket("udp4");
 
   client.connect(rinfo.port, rinfo.address, () => {
-    storage.getFile(log, h.filename).then(
-      (f) => {
-        sendFile(log, client, f);
-      },
-      (err) => {
-        log.info(err, "failed to send a file");
+    const stream = storage.saveFile(log, h.filename);
 
-        sendClientErr(log, client, ERR_CODES.NOT_FOUND, "file not found");
-      },
-    );
+    saveFile(log, client, stream);
   });
 }
 
 /**
  * @param {import("../logger").Logger} log
  * @param {dgram.Socket} client
- * @param {Buffer} file
+ * @param {WriteStream} stream
  * */
-function sendFile(log, client, file) {
-  let block = 1;
+function saveFile(log, client, stream) {
+  const initalPacket = getAckPacket(0);
 
-  const totalBlocks = Math.ceil(file.length / MAX_DATA_OP_DATA_SIZE);
+  client.send(initalPacket, getClientSendCb(log));
 
-  const initalPacket = getReadPacketWithHeader(
-    getChunkSubarray(file, block),
-    block,
-  );
-
-  client.send(initalPacket, (err, bytes) => {
-    getClientSendCb(log)(err, bytes);
-
-    block++;
-  });
+  let isClosed = false;
 
   client.on("message", (chunk, rinfo) => {
     const opCode = getMsgOpCode(chunk);
 
     log.info({ size: rinfo.size, opCode }, "client packet received");
 
-    log.debug({ packet: chunk.toString("hex") }, "client packet");
-
     switch (opCode) {
-      case OP_CODES.ACK:
-        if (block <= totalBlocks) {
-          const packet = getReadPacketWithHeader(
-            getChunkSubarray(file, block),
-            block,
+      case OP_CODES.DATA:
+        if (isClosed) {
+          sendClientErr(
+            log,
+            client,
+            ERR_CODES.UNKNOWN,
+            "file is already saved",
+          );
+
+          break;
+        }
+
+        const block = getDataChunkBlock(chunk);
+
+        if (!block) {
+          sendClientErr(log, client, ERR_CODES.UNKNOWN, "invalid block number");
+
+          break;
+        }
+
+        const data = getDataChunkData(chunk);
+
+        stream.write(data, (err) => {
+          if (err) {
+            const msg = err.message || "failed to save";
+
+            sendClientErr(log, client, ERR_CODES.UNKNOWN, msg);
+
+            return;
+          }
+
+          const packet = getAckPacket(block);
+          log.debug(
+            {
+              packet,
+              block,
+            },
+            "sendind an ack",
           );
           client.send(packet, getClientSendCb(log));
+        });
 
-          block++;
+        if (rinfo.size < TFTP_MTU) {
+          isClosed = true;
+          stream.close();
         }
-        break;
-      case OP_CODES.ERR:
-        const packet = getReadPacketWithHeader(
-          getChunkSubarray(file, block),
-          block,
-        );
-        client.send(packet, getClientSendCb(log));
+
         break;
 
-      case OP_CODES.DATA:
+      case OP_CODES.ERR:
+        // TODO: add
+        break;
+
+      case OP_CODES.ACK:
       case OP_CODES.RRQ:
       case OP_CODES.WRQ:
       default:
@@ -94,16 +111,21 @@ function sendFile(log, client, file) {
 }
 
 /**
- * @param {Buffer} buf
- * @param {Number} block
+ * @param {Buffer} chunk
+ *
+ * @returns {Number}
+ * */
+function getDataChunkBlock(chunk) {
+  return parseInt(chunk.subarray(2, 4).toString("hex"), 10);
+}
+
+/**
+ * @param {Buffer} chunk
  *
  * @returns {Buffer}
  * */
-function getChunkSubarray(buf, block) {
-  return buf.subarray(
-    (block - 1) * MAX_DATA_OP_DATA_SIZE,
-    block * MAX_DATA_OP_DATA_SIZE,
-  );
+function getDataChunkData(chunk) {
+  return chunk.subarray(4);
 }
 
 /**
@@ -145,21 +167,18 @@ function getClientSendCb(log) {
 }
 
 /**
- * @param {Buffer} data
  * @param {Number} block
  *
  * @returns {Buffer}
  * */
-function getReadPacketWithHeader(data, block) {
-  const size = DATA_OP_MIN_SIZE + data.length;
-  const b = Buffer.alloc(size);
-  b.writeUint16BE(OP_CODES.DATA, 0);
+function getAckPacket(block) {
+  const b = Buffer.alloc(ACK_PACKET_SIZE);
+  b.writeUint16BE(OP_CODES.ACK, 0);
   b.writeUInt16BE(block, 2);
-  b.fill(data, DATA_OP_MIN_SIZE);
 
   return b;
 }
 
 module.exports = {
-  workWithRRQ,
+  workWithWRQ,
 };
