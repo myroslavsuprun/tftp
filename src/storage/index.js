@@ -42,10 +42,7 @@ function createStorage() {
     saveFile(log, filename) {
       log.debug({ filename }, "saving a file");
 
-      const stream = createWriteStream(
-        path.join(workingDir, DIR, filename),
-        "ascii",
-      );
+      const stream = createWriteStream(path.join(workingDir, DIR, filename));
 
       stream.on("close", () => {
         log.debug("file save stream closed");

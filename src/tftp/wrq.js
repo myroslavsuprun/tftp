@@ -116,7 +116,7 @@ function saveFile(log, client, stream) {
  * @returns {Number}
  * */
 function getDataChunkBlock(chunk) {
-  return parseInt(chunk.subarray(2, 4).toString("hex"), 10);
+  return parseInt(chunk.subarray(2, 4).toString("hex"), 16);
 }
 
 /**
