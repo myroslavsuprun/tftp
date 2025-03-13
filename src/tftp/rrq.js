@@ -13,13 +13,20 @@ const { getMsgOpCode, parseWRQHeader } = require("./util");
  * @param {import("../storage").Storage} storage
  * @param {import("dgram").RemoteInfo} rinfo
  * @param {Buffer} chunk
+ * @param {function(): dgram.Socket} [socketFactory] - Optional. Defaults to creating a new UDP4 socket.
  * */
-function workWithRRQ(log, storage, rinfo, chunk) {
+function workWithRRQ(
+  log,
+  storage,
+  rinfo,
+  chunk,
+  clientFactory = () => dgram.createSocket("udp4"),
+) {
   const h = parseWRQHeader(chunk);
 
   log.info(h, "RRQ received");
 
-  const client = dgram.createSocket("udp4");
+  const client = clientFactory();
 
   client.connect(rinfo.port, rinfo.address, () => {
     storage.getFile(log, h.filename).then(
@@ -64,31 +71,36 @@ function sendFile(log, client, file) {
     log.debug({ packet: chunk.toString("hex") }, "client packet");
 
     switch (opCode) {
-      case OP_CODES.ACK:
-        if (block <= totalBlocks) {
-          const packet = getReadPacketWithHeader(
-            getChunkSubarray(file, block),
-            block,
-          );
-          client.send(packet, getClientSendCb(log));
-
-          block++;
+      case OP_CODES.ACK: {
+        if (block > totalBlocks) {
+          break;
         }
+        const packet = getReadPacketWithHeader(
+          getChunkSubarray(file, block),
+          block,
+        );
+        client.send(packet, getClientSendCb(log));
+
+        block++;
+
         break;
-      case OP_CODES.ERR:
+      }
+      case OP_CODES.ERR: {
         const packet = getReadPacketWithHeader(
           getChunkSubarray(file, block),
           block,
         );
         client.send(packet, getClientSendCb(log));
         break;
-
+      }
       case OP_CODES.DATA:
       case OP_CODES.RRQ:
       case OP_CODES.WRQ:
-      default:
+      default: {
         sendClientErr(log, client, ERR_CODES.ILLEGAL_OP, "illegal op");
+
         break;
+      }
     }
   });
 }
@@ -115,15 +127,25 @@ function getChunkSubarray(buf, block) {
 function sendClientErr(log, client, errCode, msg) {
   const msgBuffer = Buffer.from(msg, "ascii");
 
+  const packet = getClientErrPacket(errCode, msgBuffer);
+
+  client.send(packet, getClientSendCb(log));
+}
+
+/**
+ * @param {Number} errCode
+ * @param {Buffer} msgBuffer
+ *
+ * @returns {Buffer} packet
+ * */
+function getClientErrPacket(errCode, msgBuffer) {
   const b = Buffer.alloc(ERR_OP_MIN_SIZE + msgBuffer.length);
 
   b.writeUint16BE(OP_CODES.ERR, 0);
   b.writeUint16BE(errCode, 2);
-  b.fill(msgBuffer, 4);
-  // Add null byte at the end
-  b.writeUintBE(0, 4 + msgBuffer.length, 1);
+  msgBuffer.copy(b, 4, 0);
 
-  client.send(b, getClientSendCb(log));
+  return b;
 }
 
 /**
@@ -155,11 +177,16 @@ function getReadPacketWithHeader(data, block) {
   const b = Buffer.alloc(size);
   b.writeUint16BE(OP_CODES.DATA, 0);
   b.writeUInt16BE(block, 2);
-  b.fill(data, DATA_OP_MIN_SIZE);
+  data.copy(b, DATA_OP_MIN_SIZE, 0);
 
   return b;
 }
 
 module.exports = {
+  sendFile,
+  getChunkSubarray,
   workWithRRQ,
+  getReadPacketWithHeader,
+  sendClientErr,
+  getClientErrPacket,
 };

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest",
     "start:dev": "node --watch-path=\"./src\" src/index.js"
   },
   "keywords": [],
@@ -11,7 +11,10 @@
   "license": "ISC",
   "description": "",
   "devDependencies": {
-    "@types/node": "^22.13.10"
+    "@types/node": "^22.13.10",
+    "eslint": "^9.22.0",
+    "globals": "^16.0.0",
+    "vitest": "^3.0.8"
   },
   "dependencies": {
     "pino": "^9.6.0",

@@ -14,13 +14,20 @@ const { WriteStream } = require("fs");
  * @param {import("../storage").Storage} storage
  * @param {import("dgram").RemoteInfo} rinfo
  * @param {Buffer} chunk
+ * @param {() => dgram.Socket} [clientFactory=() => dgram.createSocket("udp4")]
  * */
-function workWithWRQ(log, storage, rinfo, chunk) {
+function workWithWRQ(
+  log,
+  storage,
+  rinfo,
+  chunk,
+  clientFactory = () => dgram.createSocket("udp4"),
+) {
   const h = parseWRQHeader(chunk);
 
   log.info(h, "WRQ received");
 
-  const client = dgram.createSocket("udp4");
+  const client = clientFactory();
 
   client.connect(rinfo.port, rinfo.address, () => {
     const stream = storage.saveFile(log, h.filename);
@@ -47,7 +54,7 @@ function saveFile(log, client, stream) {
     log.info({ size: rinfo.size, opCode }, "client packet received");
 
     switch (opCode) {
-      case OP_CODES.DATA:
+      case OP_CODES.DATA: {
         if (isClosed) {
           sendClientErr(
             log,
@@ -95,17 +102,20 @@ function saveFile(log, client, stream) {
         }
 
         break;
+      }
 
-      case OP_CODES.ERR:
+      case OP_CODES.ERR: {
         // TODO: add
         break;
+      }
 
       case OP_CODES.ACK:
       case OP_CODES.RRQ:
       case OP_CODES.WRQ:
-      default:
+      default: {
         sendClientErr(log, client, ERR_CODES.ILLEGAL_OP, "illegal op");
         break;
+      }
     }
   });
 }
