@@ -6,7 +6,7 @@ const {
   DATA_OP_MIN_SIZE,
   MAX_DATA_OP_DATA_SIZE,
 } = require("./const");
-const { getMsgOpCode, parseWRQHeader } = require("./util");
+const { getMsgOpCode, parseWRQHeader, sendClientErr } = require("./util");
 
 /**
  * @param {import("../logger").Logger} log
@@ -120,36 +120,6 @@ function getChunkSubarray(buf, block) {
 
 /**
  * @param {import("../logger").Logger} log
- * @param {dgram.Socket} client
- * @param {Number} errCode
- * @param {String} msg
- * */
-function sendClientErr(log, client, errCode, msg) {
-  const msgBuffer = Buffer.from(msg, "ascii");
-
-  const packet = getClientErrPacket(errCode, msgBuffer);
-
-  client.send(packet, getClientSendCb(log));
-}
-
-/**
- * @param {Number} errCode
- * @param {Buffer} msgBuffer
- *
- * @returns {Buffer} packet
- * */
-function getClientErrPacket(errCode, msgBuffer) {
-  const b = Buffer.alloc(ERR_OP_MIN_SIZE + msgBuffer.length);
-
-  b.writeUint16BE(OP_CODES.ERR, 0);
-  b.writeUint16BE(errCode, 2);
-  msgBuffer.copy(b, 4, 0);
-
-  return b;
-}
-
-/**
- * @param {import("../logger").Logger} log
  * */
 function getClientSendCb(log) {
   /**
@@ -187,6 +157,4 @@ module.exports = {
   getChunkSubarray,
   workWithRRQ,
   getReadPacketWithHeader,
-  sendClientErr,
-  getClientErrPacket,
 };

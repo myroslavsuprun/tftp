@@ -1,5 +1,38 @@
-import { expect, it, describe } from "vitest";
-import { getMsgOpCode, parseWRQHeader } from "./util";
+import { expect, it, describe, vi } from "vitest";
+import {
+  getClientErrPacket,
+  getMsgOpCode,
+  parseWRQHeader,
+  sendClientErr,
+} from "./util";
+import { ERR_CODES, OP_CODES } from "./const";
+
+/**
+ * @type {import("../logger").Logger}
+ * */
+const fakeLogger = {
+  info: vi.fn(),
+  debug: vi.fn(),
+  error: vi.fn(),
+};
+
+function createFakeClient() {
+  const events = {};
+  return {
+    connect: (port, address, cb) => cb(),
+    send: vi.fn((data, cb) => {
+      if (cb) cb(null, data.length);
+    }),
+    on: (event, cb) => {
+      events[event] = cb;
+    },
+    trigger: (event, ...args) => {
+      if (events[event]) {
+        events[event](...args);
+      }
+    },
+  };
+}
 
 describe("getMsgOpCode", async () => {
   it("should return the correct op code", () => {
@@ -42,5 +75,45 @@ describe("parseWRQHeader", async () => {
 
     const header = parseWRQHeader(packet);
     expect(header.mode).toEqual(mode);
+  });
+});
+
+describe("getClientErrPacket", () => {
+  it("constructs an error packet correctly", () => {
+    const errCode = ERR_CODES.NOT_FOUND;
+    const errMsg = "file not found";
+
+    const msgBuffer = Buffer.from(errMsg, "ascii");
+    const packet = getClientErrPacket(errCode, msgBuffer);
+
+    expect(packet.readUint16BE(0)).toBe(OP_CODES.ERR);
+    expect(packet.readUint16BE(2)).toBe(errCode);
+
+    const msgInPacket = packet.subarray(4, 4 + msgBuffer.length);
+    expect(msgInPacket.equals(msgBuffer)).toBe(true);
+
+    expect(packet.readUint8(4 + msgBuffer.length)).toBe(0);
+  });
+});
+
+describe("sendClientErr", () => {
+  it("constructs and sends an error packet correctly", () => {
+    const fakeClient = createFakeClient();
+    const errCode = ERR_CODES.NOT_FOUND;
+    const errMsg = "file not found";
+
+    sendClientErr(fakeLogger, fakeClient, errCode, errMsg);
+
+    expect(fakeClient.send).toHaveBeenCalledTimes(1);
+    const sentBuffer = fakeClient.send.mock.calls[0][0];
+
+    expect(sentBuffer.readUint16BE(0)).toBe(OP_CODES.ERR);
+    expect(sentBuffer.readUint16BE(2)).toBe(errCode);
+
+    const msgBuffer = Buffer.from(errMsg, "ascii");
+    const msgInBuffer = sentBuffer.subarray(4, 4 + msgBuffer.length);
+    expect(msgInBuffer.equals(msgBuffer)).toBe(true);
+
+    expect(sentBuffer.readUint8(4 + msgBuffer.length)).toBe(0);
   });
 });

@@ -1,12 +1,6 @@
 const dgram = require("dgram");
-const {
-  OP_CODES,
-  ERR_CODES,
-  ERR_OP_MIN_SIZE,
-  ACK_PACKET_SIZE,
-  TFTP_MTU,
-} = require("./const");
-const { getMsgOpCode, parseWRQHeader } = require("./util");
+const { OP_CODES, ERR_CODES, ACK_PACKET_SIZE, TFTP_MTU } = require("./const");
+const { getMsgOpCode, parseWRQHeader, sendClientErr } = require("./util");
 const { WriteStream } = require("fs");
 
 /**
@@ -140,26 +134,6 @@ function getDataChunkData(chunk) {
 
 /**
  * @param {import("../logger").Logger} log
- * @param {dgram.Socket} client
- * @param {Number} errCode
- * @param {String} msg
- * */
-function sendClientErr(log, client, errCode, msg) {
-  const msgBuffer = Buffer.from(msg, "ascii");
-
-  const b = Buffer.alloc(ERR_OP_MIN_SIZE + msgBuffer.length);
-
-  b.writeUint16BE(OP_CODES.ERR, 0);
-  b.writeUint16BE(errCode, 2);
-  b.fill(msgBuffer, 4);
-  // Add null byte at the end
-  b.writeUintBE(0, 4 + msgBuffer.length, 1);
-
-  client.send(b, getClientSendCb(log));
-}
-
-/**
- * @param {import("../logger").Logger} log
  * */
 function getClientSendCb(log) {
   /**
@@ -191,4 +165,8 @@ function getAckPacket(block) {
 
 module.exports = {
   workWithWRQ,
+  saveFile,
+  getAckPacket,
+  getClientSendCb,
+  getDataChunkData,
 };

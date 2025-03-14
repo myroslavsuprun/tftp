@@ -4,8 +4,6 @@ import {
   sendFile,
   getChunkSubarray,
   getReadPacketWithHeader,
-  sendClientErr,
-  getClientErrPacket,
 } from "./rrq";
 import {
   OP_CODES,
@@ -85,46 +83,6 @@ describe("getReadPacketWithHeader", () => {
 
     const dataInPacket = packet.subarray(DATA_OP_MIN_SIZE);
     expect(dataInPacket.equals(testData)).toBe(true);
-  });
-});
-
-describe("getClientErrPacket", () => {
-  it("constructs an error packet correctly", () => {
-    const errCode = ERR_CODES.NOT_FOUND;
-    const errMsg = "file not found";
-
-    const msgBuffer = Buffer.from(errMsg, "ascii");
-    const packet = getClientErrPacket(errCode, msgBuffer);
-
-    expect(packet.readUint16BE(0)).toBe(OP_CODES.ERR);
-    expect(packet.readUint16BE(2)).toBe(errCode);
-
-    const msgInPacket = packet.subarray(4, 4 + msgBuffer.length);
-    expect(msgInPacket.equals(msgBuffer)).toBe(true);
-
-    expect(packet.readUint8(4 + msgBuffer.length)).toBe(0);
-  });
-});
-
-describe("sendClientErr", () => {
-  it("constructs and sends an error packet correctly", () => {
-    const fakeClient = createFakeClient();
-    const errCode = ERR_CODES.NOT_FOUND;
-    const errMsg = "file not found";
-
-    sendClientErr(fakeLogger, fakeClient, errCode, errMsg);
-
-    expect(fakeClient.send).toHaveBeenCalledTimes(1);
-    const sentBuffer = fakeClient.send.mock.calls[0][0];
-
-    expect(sentBuffer.readUint16BE(0)).toBe(OP_CODES.ERR);
-    expect(sentBuffer.readUint16BE(2)).toBe(errCode);
-
-    const msgBuffer = Buffer.from(errMsg, "ascii");
-    const msgInBuffer = sentBuffer.subarray(4, 4 + msgBuffer.length);
-    expect(msgInBuffer.equals(msgBuffer)).toBe(true);
-
-    expect(sentBuffer.readUint8(4 + msgBuffer.length)).toBe(0);
   });
 });
 
