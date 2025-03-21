@@ -9,12 +9,12 @@ TFTP is a simple file transfer protocol defined in RFC 1350. It uses UDP as its 
 ### Running the Server
 
 1. Install dependencies:
-   npm install
+   `npm install`
 
 2. Start the server in development mode:
-   npm run start:dev
+   `npm run start:dev`
 
 ### Running Tests
 
 Run tests using:
-   npm test
+   `npm test`
